@@ -134,8 +134,9 @@ The Rust NIF runs on the normal BEAM scheduler. At quality 4 with typical SSE me
 
 1. Update `@version` in `mix.exs`
 2. Commit and push to `main`
-3. Create a GitHub release with a `v`-prefixed tag (e.g. `v0.1.0`)
-4. The CI workflow builds precompiled NIFs for all platforms, uploads them to the release, and generates the checksum file
+3. Create a new tag to match the version in `mix.exs`. If the version there is `0.2.0`, create a tag of `v0.2.0`.
+4. Push the tag to Github
+5. The CI workflow builds precompiled NIFs for select platforms, uploads them to the release, and generates the checksum file
 
 ## License
 
