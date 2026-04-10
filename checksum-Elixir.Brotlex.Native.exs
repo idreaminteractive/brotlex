@@ -1,8 +1,8 @@
 %{
-  "libbrotlex-v0.1.0-nif-2.15-aarch64-unknown-linux-gnu.so.tar.gz" => "sha256:6f3b61ca8d195a47c69e20a7e4eaf562513d6b4a11c9d3c01fc7c79c23a4f34b",
-  "libbrotlex-v0.1.0-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz" => "sha256:77d149c9db45dd706198a7c2c9b7142fae0617e7bf37b05876aa9d61aa692d26",
-  "libbrotlex-v0.1.0-nif-2.16-aarch64-unknown-linux-gnu.so.tar.gz" => "sha256:2f26a2cd915902fc47a7d82cbc317dd14e5d0173b142ae26f790d5242e2ca16e",
-  "libbrotlex-v0.1.0-nif-2.16-x86_64-unknown-linux-gnu.so.tar.gz" => "sha256:2837e54013c45493ee5af0a4a016b21d772885f3266f9d4c207f191dc0b8b3f5",
-  "libbrotlex-v0.1.0-nif-2.17-aarch64-unknown-linux-gnu.so.tar.gz" => "sha256:dd0bc6b06891abeb5ebce4ffd3670f38ae18e7fce8e3c5029c5c113f6668f00a",
-  "libbrotlex-v0.1.0-nif-2.17-x86_64-unknown-linux-gnu.so.tar.gz" => "sha256:9a44df2fc2e2d22c737691a0626bd1f35898a9b23122629e4182259f9a943ff8"
+  "libbrotlex-v0.1.0-nif-2.15-aarch64-unknown-linux-gnu.so.tar.gz" => "sha256:50ec6d84028061f532d8a42e19f8728446bc13c7ee9c1f851eb145ebe0a238fc",
+  "libbrotlex-v0.1.0-nif-2.15-x86_64-unknown-linux-gnu.so.tar.gz" => "sha256:129774e6b6fce30623a9eaa6d83f4198a790ae19fae30c890658d2d58c071fec",
+  "libbrotlex-v0.1.0-nif-2.16-aarch64-unknown-linux-gnu.so.tar.gz" => "sha256:93e59a9320204d1d4b1066401f950724a26cb8cf9c0c9e908a7a474d5d5b0067",
+  "libbrotlex-v0.1.0-nif-2.16-x86_64-unknown-linux-gnu.so.tar.gz" => "sha256:9cf1c7a147ac29638132b3b667bd5645d52cd3e9586ab53b1bc00c96a46af9ec",
+  "libbrotlex-v0.1.0-nif-2.17-aarch64-unknown-linux-gnu.so.tar.gz" => "sha256:622fe1493accc22c304b5ff094f31e4944afa35be9fda94e02607e47e39311fd",
+  "libbrotlex-v0.1.0-nif-2.17-x86_64-unknown-linux-gnu.so.tar.gz" => "sha256:5dd1b6857945a882af9084cd8670c5c49b4c914ba6eaae70a38228a246189f45"
 }
