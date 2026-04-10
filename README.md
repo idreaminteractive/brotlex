@@ -35,7 +35,7 @@ For other platforms (macOS, Windows, Alpine/musl), set `BROTLEX_BUILD=1` to comp
 ```elixir
 def deps do
   [
-    {:brotlex, github: "idreaminteractive/brotlex", tag: "v0.1.0"}
+    {:brotlex, github: "idreaminteractive/brotlex", tag: "v0.1.1"}
   ]
 end
 ```
@@ -45,7 +45,7 @@ end
 ```elixir
 def deps do
   [
-    {:brotlex, "~> 0.1.0"}
+    {:brotlex, "~> 0.1.1"}
   ]
 end
 ```
