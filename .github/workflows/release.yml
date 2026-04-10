@@ -102,62 +102,29 @@ jobs:
           # Upload all NIF tarballs
           gh release upload "${TAG}" artifacts/*.tar.gz --clobber
 
-  generate-checksums:
-    name: Generate checksums and update repo
+  update-checksums:
+    name: Generate checksums and update tag
     needs: publish-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "27"
           elixir-version: "1.18"
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Download all NIF artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: nif-*
-          merge-multiple: true
-          path: artifacts/
-
       - name: Generate checksum file
         run: |
-          # Build the Elixir checksum map from the tarballs
-          echo '%{' > checksum-Elixir.Brotlex.Native.exs
-
-          FIRST=true
-          for f in artifacts/*.tar.gz; do
-            BASENAME="$(basename "$f")"
-            SHA=$(sha256sum "$f" | awk '{print $1}')
-
-            if [ "$FIRST" = true ]; then
-              FIRST=false
-            else
-              printf ',\n' >> checksum-Elixir.Brotlex.Native.exs
-            fi
-
-            printf '  "%s" => "sha256:%s"' "$BASENAME" "$SHA" >> checksum-Elixir.Brotlex.Native.exs
-          done
-
-          printf '\n}\n' >> checksum-Elixir.Brotlex.Native.exs
-
+          mix deps.get
+          mix rustler_precompiled.download Brotlex.Native --all --print
           echo "--- Generated checksum file ---"
           cat checksum-Elixir.Brotlex.Native.exs
 
-      - name: Verify build with checksums
-        env:
-          BROTLEX_BUILD: "1"
-        run: |
-          mix deps.get
-          mix compile
-          mix test
-
-      - name: Commit and push checksum file
+      - name: Commit checksum file to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -165,3 +132,9 @@ jobs:
           git diff --staged --quiet && echo "No changes to commit" && exit 0
           git commit -m "Update NIF checksums for ${{ github.ref_name }}"
           git push origin main
+
+      - name: Move tag to include checksum file
+        run: |
+          TAG="${{ github.ref_name }}"
+          git tag -f "${TAG}"
+          git push origin "${TAG}" --force
