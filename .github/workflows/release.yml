@@ -16,10 +16,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          # Linux aarch64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
 
@@ -34,77 +32,44 @@ jobs:
         working-directory: native/brotlex
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package NIF binary
+      - name: Package NIF tarballs
         run: |
+          set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           TARGET="${{ matrix.target }}"
-          RELEASE_DIR="native/brotlex/target/${TARGET}/release"
-          SRC_FILE="${RELEASE_DIR}/libbrotlex.so"
+          SRC="native/brotlex/target/${TARGET}/release/libbrotlex.so"
 
-          if [ ! -f "$SRC_FILE" ]; then
-            echo "ERROR: Could not find compiled NIF binary"
-            ls -la "${RELEASE_DIR}/"
+          if [ ! -f "$SRC" ]; then
+            echo "ERROR: $SRC not found"
+            ls -la "native/brotlex/target/${TARGET}/release/"
             exit 1
           fi
 
-          # RustlerPrecompiled expects the file inside the tarball to be named:
-          #   libbrotlex-v<VERSION>-nif-<NIF_VERSION>-<TARGET>.so
-          STAGING_DIR=$(mktemp -d)
+          STAGING=$(mktemp -d)
+          mkdir -p dist
 
           for NIF_VERSION in 2.15 2.16 2.17; do
-            NIF_NAME="libbrotlex-v${VERSION}-nif-${NIF_VERSION}-${TARGET}.so"
-            TARBALL="${NIF_NAME}.tar.gz"
+            # The file INSIDE the tar must match what RustlerPrecompiled expects to extract
+            NIF_FILENAME="libbrotlex-v${VERSION}-nif-${NIF_VERSION}-${TARGET}.so"
+            TARBALL="dist/${NIF_FILENAME}.tar.gz"
 
-            cp "${SRC_FILE}" "${STAGING_DIR}/${NIF_NAME}"
-            tar -czf "${TARBALL}" -C "${STAGING_DIR}" "${NIF_NAME}"
-            rm "${STAGING_DIR}/${NIF_NAME}"
+            cp "$SRC" "${STAGING}/${NIF_FILENAME}"
+            tar -czf "${TARBALL}" -C "${STAGING}" "${NIF_FILENAME}"
+            rm "${STAGING}/${NIF_FILENAME}"
 
-            echo "Created: ${TARBALL}"
+            echo "Packaged: ${TARBALL}"
           done
 
-      - name: Upload artifacts
+      - name: Upload tarballs as artifact
         uses: actions/upload-artifact@v4
         with:
           name: nif-${{ matrix.target }}
-          path: "*.tar.gz"
+          path: dist/*.tar.gz
           retention-days: 1
 
-  publish-release:
-    name: Publish GitHub Release
+  publish:
+    name: Upload release assets and generate checksums
     needs: build-natives
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all NIF artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: nif-*
-          merge-multiple: true
-          path: artifacts/
-
-      - name: List artifacts
-        run: ls -la artifacts/
-
-      - name: Create or update GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.ref_name }}"
-
-          # Create the release if it doesn't exist yet
-          if ! gh release view "${TAG}" &>/dev/null; then
-            gh release create "${TAG}" \
-              --title "${TAG}" \
-              --generate-notes
-          fi
-
-          # Upload all NIF tarballs
-          gh release upload "${TAG}" artifacts/*.tar.gz --clobber
-
-  update-checksums:
-    name: Generate checksums and update tag
-    needs: publish-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -112,29 +77,68 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - uses: erlef/setup-beam@v1
+      - name: Download all NIF artifacts
+        uses: actions/download-artifact@v4
         with:
-          otp-version: "27"
-          elixir-version: "1.18"
+          pattern: nif-*
+          merge-multiple: true
+          path: dist/
 
-      - name: Generate checksum file
+      - name: List tarballs
+        run: ls -la dist/
+
+      - name: Create GitHub Release if needed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mix deps.get
-          mix rustler_precompiled.download Brotlex.Native --all --print
-          echo "--- Generated checksum file ---"
+          TAG="${{ github.ref_name }}"
+          if ! gh release view "${TAG}" &>/dev/null; then
+            gh release create "${TAG}" --title "${TAG}" --generate-notes
+          fi
+
+      # Checksums are computed from LOCAL files BEFORE uploading.
+      # This guarantees the hash matches exactly what the release will serve —
+      # no re-download, no possibility of a race with --clobber changing the bytes.
+      - name: Generate checksum file from local tarballs
+        run: |
+          set -euo pipefail
+
+          {
+            echo '%{'
+            first=true
+            for f in $(ls dist/*.tar.gz | sort); do
+              BASENAME="$(basename "$f")"
+              SHA=$(sha256sum "$f" | awk '{print $1}')
+              if [ "$first" = true ]; then
+                first=false
+              else
+                printf ',\n'
+              fi
+              printf '  "%s" => "sha256:%s"' "$BASENAME" "$SHA"
+            done
+            printf '\n'
+            echo '}'
+          } > checksum-Elixir.Brotlex.Native.exs
+
+          echo "--- checksum-Elixir.Brotlex.Native.exs ---"
           cat checksum-Elixir.Brotlex.Native.exs
 
-      - name: Commit checksum file to main
+      - name: Upload tarballs to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" dist/*.tar.gz --clobber
+
+      - name: Commit checksum file and move tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add checksum-Elixir.Brotlex.Native.exs
-          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git diff --staged --quiet && echo "Checksum file unchanged, skipping." && exit 0
           git commit -m "Update NIF checksums for ${{ github.ref_name }}"
           git push origin main
 
-      - name: Move tag to include checksum file
-        run: |
+          # Force-move the tag to this commit so consumers get the checksum file
           TAG="${{ github.ref_name }}"
           git tag -f "${TAG}"
           git push origin "${TAG}" --force
