@@ -10,8 +10,7 @@ defmodule Brotlex.Native do
     base_url: "https://github.com/idreaminteractive/brotlex/releases/download/v#{version}",
     version: version,
     force_build: System.get_env("BROTLEX_BUILD") in ["1", "true"],
-    targets:
-      ~w(aarch64-apple-darwin x86_64-apple-darwin aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu x86_64-pc-windows-gnu),
+    targets: ~w(aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu),
     nif_versions: ["2.15", "2.16", "2.17"]
 
   # NIF function stubs — these are replaced at load time by the compiled NIF.

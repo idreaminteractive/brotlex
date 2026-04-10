@@ -25,11 +25,8 @@ This is how the [Datastar Go SDK](https://github.com/starfederation/datastar-go)
 |--------|----------|
 | `x86_64-unknown-linux-gnu` | Linux x86_64 |
 | `aarch64-unknown-linux-gnu` | Linux ARM64 (AWS Graviton, etc.) |
-| `aarch64-apple-darwin` | macOS Apple Silicon |
-| `x86_64-apple-darwin` | macOS Intel |
-| `x86_64-pc-windows-gnu` | Windows x86_64 |
 
-For Alpine Linux (musl), set `BROTLEX_BUILD=1` to compile from source (requires Rust).
+For other platforms (macOS, Windows, Alpine/musl), set `BROTLEX_BUILD=1` to compile from source (requires Rust).
 
 ## Installation
 

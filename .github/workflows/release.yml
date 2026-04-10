@@ -22,15 +22,6 @@ jobs:
           # Linux aarch64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          # macOS Apple Silicon
-          - os: macos-latest
-            target: aarch64-apple-darwin
-          # macOS Intel
-          - os: macos-13
-            target: x86_64-apple-darwin
-          # Windows x86_64
-          - os: windows-latest
-            target: x86_64-pc-windows-gnu
 
     steps:
       - uses: actions/checkout@v4
@@ -43,19 +34,14 @@ jobs:
         working-directory: native/brotlex
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package NIF binary (Unix)
-        if: runner.os != 'Windows'
+      - name: Package NIF binary
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           TARGET="${{ matrix.target }}"
           RELEASE_DIR="native/brotlex/target/${TARGET}/release"
+          SRC_FILE="${RELEASE_DIR}/libbrotlex.so"
 
-          # Find the compiled library
-          if [ -f "${RELEASE_DIR}/libbrotlex.so" ]; then
-            SRC_FILE="${RELEASE_DIR}/libbrotlex.so"
-          elif [ -f "${RELEASE_DIR}/libbrotlex.dylib" ]; then
-            SRC_FILE="${RELEASE_DIR}/libbrotlex.dylib"
-          else
+          if [ ! -f "$SRC_FILE" ]; then
             echo "ERROR: Could not find compiled NIF binary"
             ls -la "${RELEASE_DIR}/"
             exit 1
@@ -63,42 +49,10 @@ jobs:
 
           # RustlerPrecompiled expects the file inside the tarball to be named:
           #   libbrotlex-v<VERSION>-nif-<NIF_VERSION>-<TARGET>.so
-          # And the tarball itself:
-          #   libbrotlex-v<VERSION>-nif-<NIF_VERSION>-<TARGET>.so.tar.gz
           STAGING_DIR=$(mktemp -d)
 
           for NIF_VERSION in 2.15 2.16 2.17; do
             NIF_NAME="libbrotlex-v${VERSION}-nif-${NIF_VERSION}-${TARGET}.so"
-            TARBALL="${NIF_NAME}.tar.gz"
-
-            cp "${SRC_FILE}" "${STAGING_DIR}/${NIF_NAME}"
-            tar -czf "${TARBALL}" -C "${STAGING_DIR}" "${NIF_NAME}"
-            rm "${STAGING_DIR}/${NIF_NAME}"
-
-            echo "Created: ${TARBALL}"
-          done
-
-      - name: Package NIF binary (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          TARGET="${{ matrix.target }}"
-          RELEASE_DIR="native/brotlex/target/${TARGET}/release"
-
-          SRC_FILE="${RELEASE_DIR}/brotlex.dll"
-          if [ ! -f "$SRC_FILE" ]; then
-            echo "ERROR: Could not find compiled NIF binary"
-            ls -la "${RELEASE_DIR}/"
-            exit 1
-          fi
-
-          # RustlerPrecompiled expects:
-          #   brotlex-v<VERSION>-nif-<NIF_VERSION>-<TARGET>.dll (no lib prefix on Windows)
-          STAGING_DIR=$(mktemp -d)
-
-          for NIF_VERSION in 2.15 2.16 2.17; do
-            NIF_NAME="brotlex-v${VERSION}-nif-${NIF_VERSION}-${TARGET}.dll"
             TARBALL="${NIF_NAME}.tar.gz"
 
             cp "${SRC_FILE}" "${STAGING_DIR}/${NIF_NAME}"
