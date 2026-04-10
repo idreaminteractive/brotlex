@@ -52,7 +52,9 @@ defmodule Brotlex do
       {:ok, compressed} = Brotlex.encode(encoder, "data: hello\\n\\n")
   """
   @spec encode(encoder(), iodata()) :: {:ok, binary()} | {:error, term()}
-  def encode(_encoder, _data), do: :erlang.nif_error(:nif_not_loaded)
+  def encode(encoder, data) do
+    nif_encode(encoder, IO.iodata_to_binary(data))
+  end
 
   @doc """
   Finalizes the encoder and returns any remaining compressed bytes.
@@ -67,6 +69,18 @@ defmodule Brotlex do
   @spec close(encoder()) :: {:ok, binary()} | {:error, term()}
   def close(_encoder), do: :erlang.nif_error(:nif_not_loaded)
 
+  @doc """
+  One-shot Brotli decompression. Useful for testing and verifying
+  round-trip correctness.
+
+  ## Examples
+
+      {:ok, original} = Brotlex.decompress(compressed_binary)
+  """
+  @spec decompress(binary()) :: {:ok, binary()} | {:error, term()}
+  def decompress(_data), do: :erlang.nif_error(:nif_not_loaded)
+
   # Private NIF stubs
   defp nif_new(_quality), do: :erlang.nif_error(:nif_not_loaded)
+  defp nif_encode(_encoder, _data), do: :erlang.nif_error(:nif_not_loaded)
 end

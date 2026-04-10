@@ -1,0 +1,13 @@
+[package]
+name = "brotlex"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "brotlex"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.37"
+brotli = "8"
