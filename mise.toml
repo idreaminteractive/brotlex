@@ -1,0 +1,9 @@
+[env]
+MISE_EXPERIMENTAL=true
+MIX_OS_DEPS_COMPILE_PARTITION_COUNT=4
+
+[tools]
+rust = "latest"
+rust-analyzer = "latest"
+erlang = "27"
+elixir = "1.18"

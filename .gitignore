@@ -1,0 +1,28 @@
+# Elixir/Mix
+/_build/
+/deps/
+/doc/
+/.fetch
+*.ez
+*.beam
+erl_crash.dump
+mix.lock
+
+# Rust/Cargo
+native/brotlex/target/
+native/brotlex/Cargo.lock
+
+# NIF compiled artifacts
+priv/native/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.elixir_ls/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
