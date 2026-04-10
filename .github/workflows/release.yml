@@ -16,34 +16,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64 (glibc)
+          # Linux x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            use-cross: false
-          # Linux aarch64 (glibc)
+          # Linux aarch64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            use-cross: false
-          # Linux x86_64 (musl — Alpine)
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            use-cross: true
-          # Linux aarch64 (musl — Alpine)
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-musl
-            use-cross: true
           # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin
-            use-cross: false
           # macOS Intel
           - os: macos-13
             target: x86_64-apple-darwin
-            use-cross: false
           # Windows x86_64
           - os: windows-latest
             target: x86_64-pc-windows-gnu
-            use-cross: false
 
     steps:
       - uses: actions/checkout@v4
@@ -52,40 +39,42 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross (for musl targets)
-        if: matrix.use-cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build NIF (native)
-        if: "!matrix.use-cross"
+      - name: Build NIF
         working-directory: native/brotlex
         run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Build NIF (cross)
-        if: matrix.use-cross
-        working-directory: native/brotlex
-        run: cross build --release --target ${{ matrix.target }}
 
       - name: Package NIF binary (Unix)
         if: runner.os != 'Windows'
         run: |
-          # Find the compiled .so or .dylib
-          if [ -f "native/brotlex/target/${{ matrix.target }}/release/libbrotlex.so" ]; then
-            LIB_FILE="native/brotlex/target/${{ matrix.target }}/release/libbrotlex.so"
-            EXT="so"
-          elif [ -f "native/brotlex/target/${{ matrix.target }}/release/libbrotlex.dylib" ]; then
-            LIB_FILE="native/brotlex/target/${{ matrix.target }}/release/libbrotlex.dylib"
-            EXT="so"
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARGET="${{ matrix.target }}"
+          RELEASE_DIR="native/brotlex/target/${TARGET}/release"
+
+          # Find the compiled library
+          if [ -f "${RELEASE_DIR}/libbrotlex.so" ]; then
+            SRC_FILE="${RELEASE_DIR}/libbrotlex.so"
+          elif [ -f "${RELEASE_DIR}/libbrotlex.dylib" ]; then
+            SRC_FILE="${RELEASE_DIR}/libbrotlex.dylib"
           else
             echo "ERROR: Could not find compiled NIF binary"
-            ls -la native/brotlex/target/${{ matrix.target }}/release/
+            ls -la "${RELEASE_DIR}/"
             exit 1
           fi
 
-          # Package for each NIF version
+          # RustlerPrecompiled expects the file inside the tarball to be named:
+          #   libbrotlex-v<VERSION>-nif-<NIF_VERSION>-<TARGET>.so
+          # And the tarball itself:
+          #   libbrotlex-v<VERSION>-nif-<NIF_VERSION>-<TARGET>.so.tar.gz
+          STAGING_DIR=$(mktemp -d)
+
           for NIF_VERSION in 2.15 2.16 2.17; do
-            TARBALL="libbrotlex-v${GITHUB_REF_NAME#v}-nif-${NIF_VERSION}-${{ matrix.target }}.${EXT}.tar.gz"
-            tar -czf "${TARBALL}" -C "$(dirname ${LIB_FILE})" "$(basename ${LIB_FILE})"
+            NIF_NAME="libbrotlex-v${VERSION}-nif-${NIF_VERSION}-${TARGET}.so"
+            TARBALL="${NIF_NAME}.tar.gz"
+
+            cp "${SRC_FILE}" "${STAGING_DIR}/${NIF_NAME}"
+            tar -czf "${TARBALL}" -C "${STAGING_DIR}" "${NIF_NAME}"
+            rm "${STAGING_DIR}/${NIF_NAME}"
+
             echo "Created: ${TARBALL}"
           done
 
@@ -93,16 +82,29 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          LIB_FILE="native/brotlex/target/${{ matrix.target }}/release/brotlex.dll"
-          if [ ! -f "$LIB_FILE" ]; then
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARGET="${{ matrix.target }}"
+          RELEASE_DIR="native/brotlex/target/${TARGET}/release"
+
+          SRC_FILE="${RELEASE_DIR}/brotlex.dll"
+          if [ ! -f "$SRC_FILE" ]; then
             echo "ERROR: Could not find compiled NIF binary"
-            ls -la native/brotlex/target/${{ matrix.target }}/release/
+            ls -la "${RELEASE_DIR}/"
             exit 1
           fi
 
+          # RustlerPrecompiled expects:
+          #   brotlex-v<VERSION>-nif-<NIF_VERSION>-<TARGET>.dll (no lib prefix on Windows)
+          STAGING_DIR=$(mktemp -d)
+
           for NIF_VERSION in 2.15 2.16 2.17; do
-            TARBALL="libbrotlex-v${GITHUB_REF_NAME#v}-nif-${NIF_VERSION}-${{ matrix.target }}.dll.tar.gz"
-            tar -czf "${TARBALL}" -C "$(dirname ${LIB_FILE})" "$(basename ${LIB_FILE})"
+            NIF_NAME="brotlex-v${VERSION}-nif-${NIF_VERSION}-${TARGET}.dll"
+            TARBALL="${NIF_NAME}.tar.gz"
+
+            cp "${SRC_FILE}" "${STAGING_DIR}/${NIF_NAME}"
+            tar -czf "${TARBALL}" -C "${STAGING_DIR}" "${NIF_NAME}"
+            rm "${STAGING_DIR}/${NIF_NAME}"
+
             echo "Created: ${TARBALL}"
           done
 
@@ -110,7 +112,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nif-${{ matrix.target }}
-          path: libbrotlex-*.tar.gz
+          path: "*.tar.gz"
           retention-days: 1
 
   publish-release:
@@ -130,11 +132,21 @@ jobs:
       - name: List artifacts
         run: ls -la artifacts/
 
-      - name: Upload to GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" artifacts/*.tar.gz --clobber
+          TAG="${{ github.ref_name }}"
+
+          # Create the release if it doesn't exist yet
+          if ! gh release view "${TAG}" &>/dev/null; then
+            gh release create "${TAG}" \
+              --title "${TAG}" \
+              --generate-notes
+          fi
+
+          # Upload all NIF tarballs
+          gh release upload "${TAG}" artifacts/*.tar.gz --clobber
 
   generate-checksums:
     name: Generate checksums and update repo
@@ -142,6 +154,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: erlef/setup-beam@v1
         with:
@@ -160,25 +174,23 @@ jobs:
       - name: Generate checksum file
         run: |
           # Build the Elixir checksum map from the tarballs
-          echo "%" > checksum-Elixir.Brotlex.Native.exs
-          echo "{" >> checksum-Elixir.Brotlex.Native.exs
+          echo '%{' > checksum-Elixir.Brotlex.Native.exs
 
           FIRST=true
-          for f in artifacts/libbrotlex-*.tar.gz; do
+          for f in artifacts/*.tar.gz; do
             BASENAME="$(basename "$f")"
             SHA=$(sha256sum "$f" | awk '{print $1}')
 
             if [ "$FIRST" = true ]; then
               FIRST=false
             else
-              echo "," >> checksum-Elixir.Brotlex.Native.exs
+              printf ',\n' >> checksum-Elixir.Brotlex.Native.exs
             fi
 
             printf '  "%s" => "sha256:%s"' "$BASENAME" "$SHA" >> checksum-Elixir.Brotlex.Native.exs
           done
 
-          echo "" >> checksum-Elixir.Brotlex.Native.exs
-          echo "}" >> checksum-Elixir.Brotlex.Native.exs
+          printf '\n}\n' >> checksum-Elixir.Brotlex.Native.exs
 
           echo "--- Generated checksum file ---"
           cat checksum-Elixir.Brotlex.Native.exs
@@ -196,5 +208,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add checksum-Elixir.Brotlex.Native.exs
-          git commit -m "Update NIF checksums for ${{ github.ref_name }}" || echo "No changes to commit"
-          git push origin HEAD:main || echo "Could not push to main (this is expected for tag-triggered builds)"
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update NIF checksums for ${{ github.ref_name }}"
+          git push origin main
