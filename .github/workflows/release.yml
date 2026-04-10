@@ -1,0 +1,200 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-natives:
+    name: Build NIF (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 (glibc)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            use-cross: false
+          # Linux aarch64 (glibc)
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            use-cross: false
+          # Linux x86_64 (musl — Alpine)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            use-cross: true
+          # Linux aarch64 (musl — Alpine)
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            use-cross: true
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            use-cross: false
+          # macOS Intel
+          - os: macos-13
+            target: x86_64-apple-darwin
+            use-cross: false
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
+            use-cross: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (for musl targets)
+        if: matrix.use-cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build NIF (native)
+        if: "!matrix.use-cross"
+        working-directory: native/brotlex
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build NIF (cross)
+        if: matrix.use-cross
+        working-directory: native/brotlex
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Package NIF binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          # Find the compiled .so or .dylib
+          if [ -f "native/brotlex/target/${{ matrix.target }}/release/libbrotlex.so" ]; then
+            LIB_FILE="native/brotlex/target/${{ matrix.target }}/release/libbrotlex.so"
+            EXT="so"
+          elif [ -f "native/brotlex/target/${{ matrix.target }}/release/libbrotlex.dylib" ]; then
+            LIB_FILE="native/brotlex/target/${{ matrix.target }}/release/libbrotlex.dylib"
+            EXT="so"
+          else
+            echo "ERROR: Could not find compiled NIF binary"
+            ls -la native/brotlex/target/${{ matrix.target }}/release/
+            exit 1
+          fi
+
+          # Package for each NIF version
+          for NIF_VERSION in 2.15 2.16 2.17; do
+            TARBALL="libbrotlex-v${GITHUB_REF_NAME#v}-nif-${NIF_VERSION}-${{ matrix.target }}.${EXT}.tar.gz"
+            tar -czf "${TARBALL}" -C "$(dirname ${LIB_FILE})" "$(basename ${LIB_FILE})"
+            echo "Created: ${TARBALL}"
+          done
+
+      - name: Package NIF binary (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          LIB_FILE="native/brotlex/target/${{ matrix.target }}/release/brotlex.dll"
+          if [ ! -f "$LIB_FILE" ]; then
+            echo "ERROR: Could not find compiled NIF binary"
+            ls -la native/brotlex/target/${{ matrix.target }}/release/
+            exit 1
+          fi
+
+          for NIF_VERSION in 2.15 2.16 2.17; do
+            TARBALL="libbrotlex-v${GITHUB_REF_NAME#v}-nif-${NIF_VERSION}-${{ matrix.target }}.dll.tar.gz"
+            tar -czf "${TARBALL}" -C "$(dirname ${LIB_FILE})" "$(basename ${LIB_FILE})"
+            echo "Created: ${TARBALL}"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nif-${{ matrix.target }}
+          path: libbrotlex-*.tar.gz
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-natives
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all NIF artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nif-*
+          merge-multiple: true
+          path: artifacts/
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" artifacts/*.tar.gz --clobber
+
+  generate-checksums:
+    name: Generate checksums and update repo
+    needs: publish-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Download all NIF artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nif-*
+          merge-multiple: true
+          path: artifacts/
+
+      - name: Generate checksum file
+        run: |
+          # Build the Elixir checksum map from the tarballs
+          echo "%" > checksum-Elixir.Brotlex.Native.exs
+          echo "{" >> checksum-Elixir.Brotlex.Native.exs
+
+          FIRST=true
+          for f in artifacts/libbrotlex-*.tar.gz; do
+            BASENAME="$(basename "$f")"
+            SHA=$(sha256sum "$f" | awk '{print $1}')
+
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              echo "," >> checksum-Elixir.Brotlex.Native.exs
+            fi
+
+            printf '  "%s" => "sha256:%s"' "$BASENAME" "$SHA" >> checksum-Elixir.Brotlex.Native.exs
+          done
+
+          echo "" >> checksum-Elixir.Brotlex.Native.exs
+          echo "}" >> checksum-Elixir.Brotlex.Native.exs
+
+          echo "--- Generated checksum file ---"
+          cat checksum-Elixir.Brotlex.Native.exs
+
+      - name: Verify build with checksums
+        env:
+          BROTLEX_BUILD: "1"
+        run: |
+          mix deps.get
+          mix compile
+          mix test
+
+      - name: Commit and push checksum file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add checksum-Elixir.Brotlex.Native.exs
+          git commit -m "Update NIF checksums for ${{ github.ref_name }}" || echo "No changes to commit"
+          git push origin HEAD:main || echo "Could not push to main (this is expected for tag-triggered builds)"

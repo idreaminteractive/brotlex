@@ -14,8 +14,6 @@ defmodule Brotlex do
       {:ok, final} = Brotlex.close(encoder)
   """
 
-  use Rustler, otp_app: :brotlex, crate: "brotlex"
-
   @type encoder :: reference()
   @type quality :: 0..11
 
@@ -35,7 +33,7 @@ defmodule Brotlex do
   @spec new(keyword()) :: {:ok, encoder()} | {:error, term()}
   def new(opts \\ []) do
     quality = Keyword.get(opts, :quality, 4)
-    nif_new(quality)
+    Brotlex.Native.nif_new(quality)
   end
 
   @doc """
@@ -53,7 +51,7 @@ defmodule Brotlex do
   """
   @spec encode(encoder(), iodata()) :: {:ok, binary()} | {:error, term()}
   def encode(encoder, data) do
-    nif_encode(encoder, IO.iodata_to_binary(data))
+    Brotlex.Native.nif_encode(encoder, IO.iodata_to_binary(data))
   end
 
   @doc """
@@ -67,7 +65,7 @@ defmodule Brotlex do
       {:ok, final_bytes} = Brotlex.close(encoder)
   """
   @spec close(encoder()) :: {:ok, binary()} | {:error, term()}
-  def close(_encoder), do: :erlang.nif_error(:nif_not_loaded)
+  defdelegate close(encoder), to: Brotlex.Native
 
   @doc """
   One-shot Brotli decompression. Useful for testing and verifying
@@ -78,9 +76,5 @@ defmodule Brotlex do
       {:ok, original} = Brotlex.decompress(compressed_binary)
   """
   @spec decompress(binary()) :: {:ok, binary()} | {:error, term()}
-  def decompress(_data), do: :erlang.nif_error(:nif_not_loaded)
-
-  # Private NIF stubs
-  defp nif_new(_quality), do: :erlang.nif_error(:nif_not_loaded)
-  defp nif_encode(_encoder, _data), do: :erlang.nif_error(:nif_not_loaded)
+  defdelegate decompress(data), to: Brotlex.Native
 end

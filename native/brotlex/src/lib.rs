@@ -131,4 +131,4 @@ fn decompress<'a>(
     Ok((rustler::types::atom::ok(), out.into()))
 }
 
-rustler::init!("Elixir.Brotlex", load = on_load);
+rustler::init!("Elixir.Brotlex.Native", load = on_load);

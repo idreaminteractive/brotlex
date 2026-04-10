@@ -6,11 +6,9 @@
 *.ez
 *.beam
 erl_crash.dump
-mix.lock
 
-# Rust/Cargo
+# Rust/Cargo build artifacts (Cargo.lock is committed for reproducibility)
 native/brotlex/target/
-native/brotlex/Cargo.lock
 
 # NIF compiled artifacts
 priv/native/

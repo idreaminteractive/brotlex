@@ -2,7 +2,7 @@ defmodule Brotlex.MixProject do
   use Mix.Project
 
   @version "0.1.0"
-  @source_url "https://github.com/yourusername/brotlex"
+  @source_url "https://github.com/idreaminteractive/brotlex"
 
   def project do
     [
@@ -24,7 +24,8 @@ defmodule Brotlex.MixProject do
 
   defp deps do
     [
-      {:rustler, "~> 0.35.0"},
+      {:rustler, "~> 0.35.0", optional: true, runtime: false},
+      {:rustler_precompiled, "~> 0.9.0"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
@@ -38,7 +39,16 @@ defmodule Brotlex.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib native mix.exs README.md LICENSE)
+      files: ~w(
+        lib
+        native/brotlex/src
+        native/brotlex/Cargo.toml
+        native/brotlex/Cargo.lock
+        mix.exs
+        README.md
+        LICENSE
+        checksum-Elixir.Brotlex.Native.exs
+      )
     ]
   end
 end

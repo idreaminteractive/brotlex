@@ -17,11 +17,33 @@ This is how the [Datastar Go SDK](https://github.com/starfederation/datastar-go)
 ## Requirements
 
 - Elixir >= 1.15
-- Rust toolchain (stable)
+- **No Rust required** -- precompiled NIF binaries are downloaded automatically for supported platforms
+
+### Supported platforms
+
+| Target | Platform |
+|--------|----------|
+| `x86_64-unknown-linux-gnu` | Linux x86_64 |
+| `aarch64-unknown-linux-gnu` | Linux ARM64 (AWS Graviton, etc.) |
+| `x86_64-unknown-linux-musl` | Alpine Linux x86_64 |
+| `aarch64-unknown-linux-musl` | Alpine Linux ARM64 |
+| `aarch64-apple-darwin` | macOS Apple Silicon |
+| `x86_64-apple-darwin` | macOS Intel |
+| `x86_64-pc-windows-gnu` | Windows x86_64 |
 
 ## Installation
 
-Add `brotlex` to your list of dependencies in `mix.exs`:
+### As a Git dependency (no Hex.pm required)
+
+```elixir
+def deps do
+  [
+    {:brotlex, github: "idreaminteractive/brotlex", tag: "v0.1.0"}
+  ]
+end
+```
+
+### From Hex (if published)
 
 ```elixir
 def deps do
@@ -31,7 +53,13 @@ def deps do
 end
 ```
 
-Rust must be installed on the build machine. The NIF is compiled automatically via [Rustler](https://github.com/rusterlium/rustler) during `mix compile`.
+### Building from source
+
+If you want to compile the NIF locally (requires Rust stable):
+
+```bash
+BROTLEX_BUILD=1 mix deps.compile brotlex
+```
 
 ## API
 
@@ -104,6 +132,13 @@ end
 4. `Brotlex.close/1` finalizes the brotli stream and releases the encoder
 
 The Rust NIF runs on the normal BEAM scheduler. At quality 4 with typical SSE message sizes, compression takes microseconds and does not risk scheduler blocking.
+
+## Releasing a new version
+
+1. Update `@version` in `mix.exs`
+2. Commit and push to `main`
+3. Create a GitHub release with a `v`-prefixed tag (e.g. `v0.1.0`)
+4. The CI workflow builds precompiled NIFs for all platforms, uploads them to the release, and generates the checksum file
 
 ## License
 
